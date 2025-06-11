@@ -139,7 +139,7 @@ def find_root_causes():
     selected_symptoms = [symptom for symptom, selected in st.session_state["selected_symptoms"].items() if selected]
     print(f"Selected symptoms: {selected_symptoms}")
     records, summary, keys = driver.execute_query("""
-        MATCH p=(symptom:Observable)<-[r:MAY_CAUSE]-+(cause:Observable) WHERE symptom.name IN $selected_symptoms RETURN p""", 
+        MATCH p=(symptom:Observable)<-[r:MAY_CAUSE]-*(cause:Observable) WHERE symptom.name IN $selected_symptoms RETURN p""", 
         database_=os.getenv("NEO4J_DATABASE"), 
         routing_="r",
         selected_symptoms=selected_symptoms
