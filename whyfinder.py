@@ -63,7 +63,7 @@ def find_symptoms(symptom: str, k: int = 5):
     records, summary, keys = driver.execute_query("""
         CALL db.index.vector.queryNodes($vector_index, $k, $symptom_vector) YIELD node as observable, score
         LIMIT 5                                          
-        RETURN observable.name AS title, score""", 
+        RETURN observable.name AS title, score, observable.description AS description""", 
         database_=os.getenv("NEO4J_DATABASE"), 
         routing_="r",
         vector_index=os.getenv("NEO4J_VECTOR_INDEX"), 
@@ -211,7 +211,9 @@ for i, results in enumerate(all_results):
     for j, result in enumerate(results):
         if not result["title"] in selected_symptoms.keys():
             checked = True if j==0 else False # by default only select the top result for each symptom
-            selected_symptoms[result["title"]] = col2.checkbox(result["title"], checked, key="matched_symptoms_"+result["title"]+"_"+str(i)+"_"+str(j))
+            selected_symptoms[result["title"]] = col2.checkbox(result["title"], checked, 
+                                                               key="matched_symptoms_"+result["title"]+"_"+str(i)+"_"+str(j),
+                                                               help=f"[Matching score: {result['score']}]  {result['description']}")
 
 st.session_state["selected_symptoms"] = selected_symptoms
 #test if any value in selected_symptoms is True
