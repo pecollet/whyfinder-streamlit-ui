@@ -11,6 +11,9 @@ from streamlit_agraph import Node, Edge, agraph, Config
 from typing import List, Tuple, Dict, Any
 
 #run with : streamlit run whyfinder.py
+st.set_page_config(page_title="WhyFinder", page_icon=":mag_right:", layout="wide")
+css_rules = f""".st-key-ruleout_multiselect .stMultiSelect div[data-baseweb="select"] span[data-baseweb="tag"] {{background-color: green;}}"""
+st.markdown(f"<style>{css_rules}</style>", unsafe_allow_html=True)
 
 load_dotenv()
 driver = GraphDatabase.driver(os.getenv("NEO4J_URI"), auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD")))
@@ -102,7 +105,7 @@ def transform_neo4j_paths_to_agraph(records, red_list: List = [], green_list: Li
     """
     agraph_nodes = []
     agraph_edges = []
-    print(f"red_list: {red_list}")
+    print(f"red_list: {red_list}, green_list: {green_list}")
     
     # Use sets to keep track of processed element IDs to avoid duplicates
     seen_node_ids = set()
@@ -110,6 +113,11 @@ def transform_neo4j_paths_to_agraph(records, red_list: List = [], green_list: Li
 
     for record in records:
         path = record["p"]
+        if not path.relationships:
+            for n in path.nodes:
+                if n.element_id not in seen_node_ids:
+                    agraph_nodes.append(build_agraph_node(n, red_list, green_list))
+                    seen_node_ids.add(n.element_id)
         
         # Process all relationships in the path to ensure all nodes are included
         for rel in path.relationships:
@@ -144,13 +152,35 @@ def find_root_causes():
         routing_="r",
         selected_symptoms=selected_symptoms
     )
-    nodes, edges = transform_neo4j_paths_to_agraph(records, selected_symptoms)
+    red_list = selected_symptoms + st.session_state.get("confirm_multiselect", [])
+    red_list = list(dict.fromkeys(red_list))
+    green_list = st.session_state.get("ruleout_multiselect", [])
+    nodes, edges = transform_neo4j_paths_to_agraph(records, red_list, green_list)
     config = Config(width=800, height=400, directed=True, physics=True)
-    agraph(nodes=nodes, edges=edges, config=config)
+    with col3:
+        agraph(nodes=nodes, edges=edges, config=config)
+    # with col4:
+    #     confirm_multiselect = st.multiselect(
+    #         "Confirm symptoms",
+    #         [n.label for n in nodes],
+    #         key="confirm_multiselect",
+    #         default=selected_symptoms,
+    #         on_change=find_root_causes
+    #     )
+    #     ruleout_multiselect = st.multiselect(
+    #         "Rule out symptoms",
+    #         [n.label for n in nodes],
+    #         key="ruleout_multiselect",
+    #         default=[],
+    #         on_change=find_root_causes
+    #     )
 
 
-
-symptoms = st.text_area("Symptoms", key="symptoms", placeholder="Enter your symptoms here (1 per line)...", height=200, help="List the symptoms you are experiencing.")
+container1 = st.container(border=True)
+container2 = st.container(border=True)
+col1, col2 = container1.columns(2)
+col3, col4 = container2.columns(2)
+symptoms = col1.text_area("Symptoms", key="symptoms", placeholder="Enter your symptoms here (1 per line)...", height=200, help="List the symptoms you are experiencing.")
 
 #split by line breaks
 symptoms_list = symptoms.splitlines()
@@ -169,20 +199,21 @@ for i, symptom in enumerate(symptoms_list):
         # st.write(results)
         all_results.append(results)
 
-if all(not inner_list for inner_list in all_results):
-    st.write("No symptoms found. Please try again with different symptoms.")
-else:
-    ready_for_rca=True
-    st.write("The following symptoms were matched in the WhyFinder database. Please select the ones you want to include in the analysis:") 
+if symptoms:
+    if all(not inner_list for inner_list in all_results):
+        col2.write("No symptoms found. Please try again with different symptoms.")
+    else:
+        ready_for_rca=True
+        col2.write("The following symptoms were matched in the WhyFinder database. Please select the ones you want to include in the analysis:") 
 
 selected_symptoms = {}
 for i, results in enumerate(all_results):
     for j, result in enumerate(results):
         if not result["title"] in selected_symptoms.keys():
             checked = True if j==0 else False # by default only select the top result for each symptom
-            selected_symptoms[result["title"]] = st.checkbox(result["title"], checked, key="matched_symptoms_"+result["title"]+"_"+str(i)+"_"+str(j))
+            selected_symptoms[result["title"]] = col2.checkbox(result["title"], checked, key="matched_symptoms_"+result["title"]+"_"+str(i)+"_"+str(j))
 
 st.session_state["selected_symptoms"] = selected_symptoms
 #test if any value in selected_symptoms is True
 if any(selected_symptoms.values()):
-    st.button("Find Root Cause", on_click=find_root_causes)
+    col2.button("Find Root Cause", on_click=find_root_causes)
